@@ -1,0 +1,10 @@
+[project]
+name = "remi"
+version = "0.1.0"
+description = "Remi - Personal AI Assistant"
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.backends"
