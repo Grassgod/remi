@@ -381,7 +381,9 @@ export class RemiData {
       const results: TokenStatus[] = [];
 
       for (const [service, types] of Object.entries(data)) {
+        if (typeof types !== "object" || types === null || Array.isArray(types)) continue;
         for (const [type, token] of Object.entries(types as Record<string, any>)) {
+          if (typeof token !== "object" || token === null) continue;
           const expiresAt = token.expiresAt ?? 0;
           const msLeft = expiresAt - now;
           results.push({
