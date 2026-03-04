@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 
 const log = createLogger("feishu");
 import { createFeishuClient } from "./client.js";
+import { getChatMode } from "./chat-info.js";
 import { sendMarkdownCardFeishu, sendCardFeishu, buildRichCard } from "./send.js";
 import { FeishuStreamingSession, type TokenProvider } from "./streaming.js";
 import {
@@ -208,6 +209,23 @@ export class FeishuConnector implements Connector {
       }
     }
 
+    // Topic groups: every new message is a thread root, but Feishu leaves root_id
+    // empty for the root message itself. Auto-fill with messageId so each topic
+    // gets its own isolated session (instead of falling into a shared group session).
+    let rootId = msg.rootId;
+    if (!rootId && msg.chatType === "group") {
+      const client = createFeishuClient({
+        appId: this._config.appId,
+        appSecret: this._config.appSecret,
+        domain: this._config.domain,
+      });
+      const chatMode = await getChatMode(client, msg.chatId);
+      if (chatMode === "topic") {
+        rootId = msg.messageId;
+        log.debug(`topic group: using messageId as rootId for ${msg.messageId}`);
+      }
+    }
+
     const incoming: IncomingMessage = {
       text,
       chatId: msg.chatId,
@@ -222,7 +240,7 @@ export class FeishuConnector implements Connector {
         monitored: msg.monitored,
         mediaCount: msg.media.length,
         quotedContent: msg.quotedContent,
-        rootId: msg.rootId,
+        rootId,
       },
     };
 
@@ -473,20 +491,6 @@ export class FeishuConnector implements Connector {
           stats,
           mentionOpenId,
         });
-
-        // Send in-app urgent notification so the user gets a push notification
-        // (card @mentions don't trigger Feishu notifications)
-        if (mentionOpenId && session.getMessageId()) {
-          try {
-            await client.im.message.urgentApp({
-              path: { message_id: session.getMessageId()! },
-              params: { user_id_type: "open_id" },
-              data: { user_id_list: [mentionOpenId] },
-            });
-          } catch (err) {
-            log.warn(`urgent_app notification failed: ${String(err)}`);
-          }
-        }
       } catch (err) {
         log.error(`streaming error: ${String(err)}`);
         // Always close the streaming card to prevent it from being stuck
